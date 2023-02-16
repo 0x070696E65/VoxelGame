@@ -597,6 +597,45 @@ public partial class @GameInputs : IInputActionCollection2, IDisposable
                     ""isPartOfComposite"": false
                 }
             ]
+        },
+        {
+            ""name"": ""Paint"",
+            ""id"": ""21e0865a-5841-43b4-abae-d9c0cd8ef2f8"",
+            ""actions"": [
+                {
+                    ""name"": ""GetMousePos"",
+                    ""type"": ""Button"",
+                    ""id"": ""aecc76c7-cf1a-49aa-bc93-3f75d83fbba2"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                }
+            ],
+            ""bindings"": [
+                {
+                    ""name"": """",
+                    ""id"": ""cc5dd3cb-c614-4c96-af4a-4606b8c63fe6"",
+                    ""path"": ""<Mouse>/leftButton"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""キーボード＆マウス"",
+                    ""action"": ""GetMousePos"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""80728e33-a929-4fda-a9d3-fa4e4104d7db"",
+                    ""path"": ""<Gamepad>/buttonSouth"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""ゲームパッド"",
+                    ""action"": ""GetMousePos"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                }
+            ]
         }
     ],
     ""controlSchemes"": [
@@ -634,6 +673,9 @@ public partial class @GameInputs : IInputActionCollection2, IDisposable
         m_Main_Save = m_Main.FindAction("Save", throwIfNotFound: true);
         m_Main_Debug = m_Main.FindAction("Debug", throwIfNotFound: true);
         m_Main_Load = m_Main.FindAction("Load", throwIfNotFound: true);
+        // Paint
+        m_Paint = asset.FindActionMap("Paint", throwIfNotFound: true);
+        m_Paint_GetMousePos = m_Paint.FindAction("GetMousePos", throwIfNotFound: true);
     }
 
     public void Dispose()
@@ -892,6 +934,39 @@ public partial class @GameInputs : IInputActionCollection2, IDisposable
         }
     }
     public MainActions @Main => new MainActions(this);
+
+    // Paint
+    private readonly InputActionMap m_Paint;
+    private IPaintActions m_PaintActionsCallbackInterface;
+    private readonly InputAction m_Paint_GetMousePos;
+    public struct PaintActions
+    {
+        private @GameInputs m_Wrapper;
+        public PaintActions(@GameInputs wrapper) { m_Wrapper = wrapper; }
+        public InputAction @GetMousePos => m_Wrapper.m_Paint_GetMousePos;
+        public InputActionMap Get() { return m_Wrapper.m_Paint; }
+        public void Enable() { Get().Enable(); }
+        public void Disable() { Get().Disable(); }
+        public bool enabled => Get().enabled;
+        public static implicit operator InputActionMap(PaintActions set) { return set.Get(); }
+        public void SetCallbacks(IPaintActions instance)
+        {
+            if (m_Wrapper.m_PaintActionsCallbackInterface != null)
+            {
+                @GetMousePos.started -= m_Wrapper.m_PaintActionsCallbackInterface.OnGetMousePos;
+                @GetMousePos.performed -= m_Wrapper.m_PaintActionsCallbackInterface.OnGetMousePos;
+                @GetMousePos.canceled -= m_Wrapper.m_PaintActionsCallbackInterface.OnGetMousePos;
+            }
+            m_Wrapper.m_PaintActionsCallbackInterface = instance;
+            if (instance != null)
+            {
+                @GetMousePos.started += instance.OnGetMousePos;
+                @GetMousePos.performed += instance.OnGetMousePos;
+                @GetMousePos.canceled += instance.OnGetMousePos;
+            }
+        }
+    }
+    public PaintActions @Paint => new PaintActions(this);
     private int m_キーボードマウスSchemeIndex = -1;
     public InputControlScheme キーボードマウスScheme
     {
@@ -934,5 +1009,9 @@ public partial class @GameInputs : IInputActionCollection2, IDisposable
         void OnSave(InputAction.CallbackContext context);
         void OnDebug(InputAction.CallbackContext context);
         void OnLoad(InputAction.CallbackContext context);
+    }
+    public interface IPaintActions
+    {
+        void OnGetMousePos(InputAction.CallbackContext context);
     }
 }

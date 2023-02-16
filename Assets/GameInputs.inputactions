@@ -575,6 +575,45 @@
                     "isPartOfComposite": false
                 }
             ]
+        },
+        {
+            "name": "Paint",
+            "id": "21e0865a-5841-43b4-abae-d9c0cd8ef2f8",
+            "actions": [
+                {
+                    "name": "GetMousePos",
+                    "type": "Button",
+                    "id": "aecc76c7-cf1a-49aa-bc93-3f75d83fbba2",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "cc5dd3cb-c614-4c96-af4a-4606b8c63fe6",
+                    "path": "<Mouse>/leftButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "キーボード＆マウス",
+                    "action": "GetMousePos",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "80728e33-a929-4fda-a9d3-fa4e4104d7db",
+                    "path": "<Gamepad>/buttonSouth",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "ゲームパッド",
+                    "action": "GetMousePos",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
         }
     ],
     "controlSchemes": [

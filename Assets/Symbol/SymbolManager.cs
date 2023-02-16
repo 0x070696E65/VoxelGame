@@ -39,6 +39,8 @@ public class SymbolManager : MonoBehaviour
     // シングルトン用
     public static SymbolManager Instance { get; private set; }
 
+    public WebSocketManager webSocketManager;
+
     private string Node = "https://mikun-testnet.tk:3001";
     
     /*
@@ -76,6 +78,14 @@ public class SymbolManager : MonoBehaviour
         return webRequest.downloadHandler.text;
     }
     
+    // 送金トランザクションが承認されたら残高を更新する関数
+    private void ObserveTransaction(WebSocketManager.WsTransaction transaction)
+    {
+        Debug.Log($"Complete Transaction"); 
+        GetAmount();
+        webSocketManager.OnConfirmedTransaction -= ObserveTransaction;
+    }
+
     // 転送トランザクション送信
     public async void TransferTransaction()
     {
@@ -98,6 +108,9 @@ public class SymbolManager : MonoBehaviour
         var result = await Announce(endpoint, payload);
         Debug.Log(result);   
 # endif
+        var hash = facade.HashTransaction(tx);
+        webSocketManager.ConnectWebSocket("wss://mikun-testnet.tk:3001/ws", addless, Converter.BytesToHex(hash.bytes));
+        webSocketManager.OnConfirmedTransaction += ObserveTransaction;
     }
     
     private static TransferTransactionV1 BuildTransferTransaction(string address, string pubKey, string mosaicId, ulong amount, string message, ulong feeMultiplier = 100)
