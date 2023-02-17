@@ -8,12 +8,7 @@ public class FirstScene: MonoBehaviour
 {
     public Text TextFrame;
     public InputField inputField;
-
-    private void Start()
-    {
-        Debug.Log("v1");
-    }
-
+    
     // 最初のシーンでボタンに設置する関数
     public async void GetAmount()
     {
