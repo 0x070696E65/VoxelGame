@@ -5,19 +5,19 @@ using NativeWebSocket;
 using UnityEngine;
 using UnityEngine.Events;
 
-public class WebSocketManager: MonoBehaviour
+public class WebSocketManager
 {
-    public UnityAction<WsTransaction> OnConfirmedTransaction;
-    private static WebSocket _websocket;
+    public static UnityAction OnConfirmedTransaction { get; set; }
+    public static WebSocket websocket { get; set; }
     
-    public async void ConnectWebSocket(string wsNode, string recipientAddress, string hash)
+    public static async void ConnectWebSocket(string wsNode, string recipientAddress, string hash)
     {
-        _websocket = new WebSocket(wsNode);
-        _websocket.OnOpen += () => { Debug.Log("WebSocket opened. " + wsNode); };
-        _websocket.OnError += errMsg => Debug.Log($"WebSocket Error Message: {errMsg}");
-        _websocket.OnClose += code => Debug.Log("WS closed with code: " + code);
+        websocket = new WebSocket(wsNode);
+        websocket.OnOpen += () => { Debug.Log("WebSocket opened. " + wsNode); };
+        websocket.OnError += errMsg => Debug.Log($"WebSocket Error Message: {errMsg}");
+        websocket.OnClose += code => Debug.Log("WS closed with code: " + code);
 
-        _websocket.OnMessage += async (msg) =>
+        websocket.OnMessage += async (msg) =>
         {
             var data = Encoding.UTF8.GetString(msg);
             Debug.Log(data);
@@ -25,20 +25,23 @@ public class WebSocketManager: MonoBehaviour
             if (rootData.uid != null)
             {
                 var body = "{\"uid\":\"" + rootData.uid + "\", \"subscribe\":\"block\"}";
-                await _websocket.SendText(body);
+                await websocket.SendText(body);
                 var confirmed = "{\"uid\":\"" + rootData.uid + "\", \"subscribe\":\"confirmedAdded/" +
                                 recipientAddress + "\"}";
-                await _websocket.SendText(confirmed);
+                await websocket.SendText(confirmed);
             }
             else
             {
                 var root = JsonUtility.FromJson<Root>(data);
-                if (root.topic == "block") Debug.Log("new block:");
+                if (root.topic == "block")
+                {
+                    Debug.Log("new block:");
+                }
                 else if (root.topic.Contains("confirmed"))
                 {
                     if (root.data.meta.hash != hash) return;
-                    await _websocket.Close();
-                    OnConfirmedTransaction?.Invoke(root.data.transaction);
+                    await websocket.Close();
+                    OnConfirmedTransaction?.Invoke();
                 }
                 else
                 {
@@ -46,26 +49,7 @@ public class WebSocketManager: MonoBehaviour
                 }
             }
         };
-        await _websocket.Connect();
-    }
-    
-    private void Update()
-    {
-#if !UNITY_WEBGL || UNITY_EDITOR
-        _websocket?.DispatchMessageQueue();
-#endif
-    }
-    
-    private async void OnDestroy()
-    {
-        if (_websocket == null) return;
-        if(_websocket.State != WebSocketState.Closed && _websocket.State != WebSocketState.Closing) await _websocket.Close();
-    }
-    
-    private async void OnApplicationQuit()
-    {
-        if (_websocket == null) return;
-        if(_websocket.State != WebSocketState.Closed && _websocket.State != WebSocketState.Closing) await _websocket.Close();
+        await websocket.Connect();
     }
     
     [Serializable]

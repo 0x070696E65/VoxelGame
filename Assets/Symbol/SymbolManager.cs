@@ -9,136 +9,101 @@ using CatSdk.CryptoTypes;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
-using UnityEngine.SceneManagement;
-using UnityEngine.UI;
 using CatSdk.Facade;
 using CatSdk.Symbol;
 using CatSdk.Symbol.Factory;
 using CatSdk.Utils;
+using UnityEngine.Events;
 using Network = CatSdk.Symbol.Network;
 using NetworkTimestamp = CatSdk.Symbol.NetworkTimestamp;
 
-public class SymbolManager : MonoBehaviour
+public class SymbolManager
 {
-    public Text TextFrame;
-    public InputField inputField;
-    
-    // 送信テスト用
-    public InputField ToAddress;
-    public InputField ToMosaicId;
-    public InputField Message;
-    public InputField SendAmount;
-    // エディタテスト用 webGlビルドの場合は不要
-    public InputField PrivateKey;
-    
     // 以下のデータは他のシーンなどでも流用できる
-    public string addless;
-    public string xymId = "72C0212E67A08BCE";
-    public float amount;
+    public static string address { get; set; }
+    public static float amount { get; set; }
     
-    // シングルトン用
-    public static SymbolManager Instance { get; private set; }
-
-    public WebSocketManager webSocketManager;
-
-    private string Node = "https://mikun-testnet.tk:3001";
-    
-    /*
-     * シングルトンと言ってこのスクリプトがアタッチされたオブジェクトが生成されたら同一プロジェクトにこれは一つしか存在しないことを名言する
-     * さすれば他のシーンからも
-     * Debug.Log(SymbolManager.Instance.amount);
-     * のように取得することができる
-     */
-    private void Awake()
-    {
-        if (Instance != null && Instance != this)
-            Destroy(gameObject);
-        else
-            Instance = this;
-    }
+    public static readonly string xymId = "72C0212E67A08BCE";
+    public const string Node = "https://mikun-testnet.tk:3001";
+    public static readonly string WsNode = "wss://mikun-testnet.tk:3001/ws";
+    public static readonly Network network = Network.TestNet;
+    public static readonly SymbolFacade facade = new (network);
     
     // この関数をボタンにインスペクターから設定する
-    public async void GetAmount()
+    public static async UniTask GetAmount()
     {
-        addless = inputField.text;
-        var symbolAccountData = await GetData($"{Node}/accounts/{addless}");
+        Debug.Log($"{Node}/accounts/{address}");
+        var symbolAccountData = await GetData($"{Node}/accounts/{address}");
         var symbolAccountDataJson = JsonUtility.FromJson<Root>(symbolAccountData);
         var xym = symbolAccountDataJson?.account.mosaics.FirstOrDefault(mosaic => mosaic.id == xymId);
         if (xym != null) amount = (float) xym.amount / 1000000;
-        Debug.Log(amount);
-        TextFrame.text = $"{amount}XYM";
     }
     
     // Apiからデータ取得するための汎用的な関数
-    async UniTask<string> GetData(string url)
+    static async UniTask<string> GetData(string url)
     {
         using var webRequest = UnityWebRequest.Get(url);
         await webRequest.SendWebRequest();
         if (webRequest.result == UnityWebRequest.Result.ConnectionError) throw new Exception(webRequest.error);
         return webRequest.downloadHandler.text;
     }
-    
-    // 送金トランザクションが承認されたら残高を更新する関数
-    private void ObserveTransaction(WebSocketManager.WsTransaction transaction)
-    {
-        Debug.Log($"Complete Transaction"); 
-        GetAmount();
-        webSocketManager.OnConfirmedTransaction -= ObserveTransaction;
-    }
 
-    // 転送トランザクション送信
-    public async void TransferTransaction()
+    // 転送トランザクション送信 Editor用
+    public static async UniTask TransferTransaction(string _priavteKey, string _address, string _mosaicId, ulong _amount, string _message, UnityAction function = null)
     {
-#if UNITY_WEBGL && !UNITY_EDITOR
-        var pubKey = SSS.getActivePublicKey();
-        var tx = BuildTransferTransaction(ToAddress.text, pubKey, ToMosaicId.text, ulong.Parse(SendAmount.text), Message.text);
-        var signedPayload = await SSS.SignTransactionByPayloadAsync(Converter.BytesToHex(tx.Serialize()));
-        var payload = "{ \"payload\" : \"" + signedPayload + "\"}";
-        var endpoint = Node + "/transactions";
-        var result = await Announce(endpoint, payload);
-        Debug.Log(result);
-# else
-        var facade = new SymbolFacade(Network.TestNet);
-        var privateKey = new PrivateKey(PrivateKey.text);
+        var privateKey = new PrivateKey(_priavteKey);
         var keyPair = new KeyPair(privateKey);
-        var tx = BuildTransferTransaction(ToAddress.text, Converter.BytesToHex(keyPair.PublicKey.bytes), ToMosaicId.text, ulong.Parse(SendAmount.text), Message.text);
+        var tx = BuildTransferTransaction(_address, Converter.BytesToHex(keyPair.PublicKey.bytes), _mosaicId, _amount, _message);
         var signature = facade.SignTransaction(keyPair, tx);
         var payload = TransactionsFactory.AttachSignature(tx, signature);
-        var endpoint = Node + "/transactions";
+        const string endpoint = Node + "/transactions";
         var result = await Announce(endpoint, payload);
         Debug.Log(result);   
-# endif
         var hash = facade.HashTransaction(tx);
-        webSocketManager.ConnectWebSocket("wss://mikun-testnet.tk:3001/ws", addless, Converter.BytesToHex(hash.bytes));
-        webSocketManager.OnConfirmedTransaction += ObserveTransaction;
+        WebSocketManager.ConnectWebSocket(WsNode, _address, Converter.BytesToHex(hash.bytes));
+        WebSocketManager.OnConfirmedTransaction += function;
     }
     
-    private static TransferTransactionV1 BuildTransferTransaction(string address, string pubKey, string mosaicId, ulong amount, string message, ulong feeMultiplier = 100)
+    // 転送トランザクション送信 SSS用
+    public static async UniTask TransferTransaction(string _address, string _mosaicId, ulong _amount, string _message, UnityAction function = null)
     {
-        var publicKey = new PublicKey(Converter.HexToBytes(pubKey));
-        var facade = new SymbolFacade(CatSdk.Symbol.Network.TestNet);
+        var pubKey = SSS.getActivePublicKey();
+        var tx = BuildTransferTransaction(_address, pubKey, _mosaicId, _amount, _message);
+        var signedPayload = await SSS.SignTransactionByPayloadAsync(Converter.BytesToHex(tx.Serialize()));
+        var arr = signedPayload.Split(",");
+        var payload = "{ \"payload\" : \"" + arr[0] + "\"}";
+        const string endpoint = Node + "/transactions";
+        var result = await Announce(endpoint, payload);
+        Debug.Log(result);
+        WebSocketManager.ConnectWebSocket(WsNode, _address, arr[1]);
+        WebSocketManager.OnConfirmedTransaction += function;
+    }
+    
+    private static TransferTransactionV1 BuildTransferTransaction(string _address, string _pubKey, string _mosaicId, ulong _amount, string _message, ulong _feeMultiplier = 100)
+    {
+        var publicKey = new PublicKey(Converter.HexToBytes(_pubKey));
         
         var tx = new TransferTransactionV1
         {
             Network = NetworkType.TESTNET,
-            RecipientAddress = new UnresolvedAddress(Converter.StringToAddress(address)),
+            RecipientAddress = new UnresolvedAddress(Converter.StringToAddress(_address)),
             Mosaics = new UnresolvedMosaic[]
             {
                 new()
                 {
-                    MosaicId = new UnresolvedMosaicId(ulong.Parse(mosaicId, NumberStyles.HexNumber)),
-                    Amount = new Amount(amount)
+                    MosaicId = new UnresolvedMosaicId(ulong.Parse(_mosaicId, NumberStyles.HexNumber)),
+                    Amount = new Amount(_amount)
                 },
             },
             SignerPublicKey = publicKey,
-            Message = Converter.Utf8ToPlainMessage(message),
+            Message = Converter.Utf8ToPlainMessage(_message),
             Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp)
         };
-        tx.Fee = new Amount(tx.Size * feeMultiplier);
+        tx.Fee = new Amount(tx.Size * _feeMultiplier);
         return tx;
     }
 
-    public static async UniTask<string> Announce(string endpoint, string payload)
+    private static async UniTask<string> Announce(string endpoint, string payload)
     {
         using var webRequest = UnityWebRequest.Put(endpoint, Encoding.UTF8.GetBytes(payload));
         webRequest.SetRequestHeader("Content-Type", "application/json");
@@ -148,12 +113,6 @@ public class SymbolManager : MonoBehaviour
             throw new Exception(webRequest.error);
         }
         return webRequest.downloadHandler.text;
-    }
-    
-    // 次のシーンで残高が取得されるか確認用
-    public void SceneNext()
-    {
-        SceneManager.LoadScene("Next");
     }
     
     [System.Serializable]
@@ -174,7 +133,7 @@ public class SymbolManager : MonoBehaviour
     public class Mosaic
     {
         public string id;
-        public int amount;
+        public ulong amount;
     }
     [System.Serializable]
     public class Account

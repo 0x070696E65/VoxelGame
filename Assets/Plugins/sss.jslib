@@ -19,8 +19,9 @@ var SSS = {
         var strPayload = UTF8ToString(payload);
         window.SSS.setTransactionByPayload(strPayload);
         var signedTx = await window.SSS.requestSign();
-        var buffer = _malloc(lengthBytesUTF8(signedTx.payload) + 1);
-        stringToUTF8(signedTx.payload, buffer, signedTx.payload.length + 1);
+        var r = signedTx.payload + "," + signedTx.hash;
+        var buffer = _malloc(lengthBytesUTF8(r) + 1);
+        stringToUTF8(r, buffer, r.length + 1);
         dynCall_vi(cb, buffer);
     }
 }
