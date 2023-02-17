@@ -23,8 +23,6 @@ public class SymbolManager
     public static string address { get; set; }
     public static float amount { get; set; }
     
-    public static string publicKey { get; set; }
-    
     public static readonly string xymId = "72C0212E67A08BCE";
     public const string Node = "https://mikun-testnet.tk:3001";
     public static readonly string WsNode = "wss://mikun-testnet.tk:3001/ws";
