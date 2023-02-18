@@ -1,12 +1,9 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using HSVPicker;
-using Unity.VisualScripting.Antlr3.Runtime.Tree;
+using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
@@ -26,11 +23,12 @@ public class PixelPaint : MonoBehaviour
     
     Vector2 _cursorPosition;
     public byte BoardSize = 16;
-    private const string filePath = "Assets/texture";
+    private string filePath;
     [SerializeField] private Button drawMode;
     [SerializeField] private Button eraceMode;
     [SerializeField] private Button allClear;
     [SerializeField] private Button save;
+    [SerializeField] private Button load;
     private bool isDraw;
     
     [SerializeField] private List<Button> changeButton;
@@ -40,11 +38,13 @@ public class PixelPaint : MonoBehaviour
 
     [SerializeField] private List<Button> Mirrors;
     [SerializeField] private List<Image> MirrorsImage;
-    private readonly List<byte> MirrorsState = new List<byte>{0,0,0,0,0,0};
-
-    private readonly List<Texture2D> textureList = new List<Texture2D>();
+    public readonly List<byte> MirrorsState = new List<byte>{0,0,0,0,0,0};
+    public readonly List<Texture2D> textureList = new List<Texture2D>();
     private readonly List<Sprite> spriteList = new List<Sprite>();
     private byte textureNumber = 0;
+    
+    [SerializeField] private GameObject previewCamera;
+    [SerializeField] private TMP_InputField voxelName;
 
     // Start is called before the first frame update
     void Start()
@@ -72,7 +72,8 @@ public class PixelPaint : MonoBehaviour
             eraceMode.interactable = false;
         });
         allClear.onClick.AddListener(()=>AllErace(textureList[textureNumber]));
-        save.onClick.AddListener(SaveTecture);
+        save.onClick.AddListener(SaveTexture);
+        load.onClick.AddListener(LoadTexture);
         isDraw = true;
 
         for (byte i = 0; i < changeButton.Count; i++) {
@@ -83,7 +84,8 @@ public class PixelPaint : MonoBehaviour
             var i1 = i;
             Mirrors[i].onClick.AddListener(()=>Mirror(i1));
         }
-        
+        previewCamera.SetActive(true);
+        filePath = Application.persistentDataPath + "/saves/";
     }
     
     void InitCanvas()
@@ -128,11 +130,12 @@ public class PixelPaint : MonoBehaviour
             Cursor.visible = true;
         }
     }
-
+    
     private void Draw()
     {
         var mp = GetMousePositionInLocalSpace(Boarad);
         var v2i = new Vector2Int((int)(mp.x / imageSize), (int)(mp.y / imageSize));
+        if (v2i.x + v2i.y * BoardSize > BoardSize * BoardSize) return;
         var pixelData = textureList[textureNumber].GetPixelData<Color32>( 0 );
         pixelData[v2i.x + v2i.y * BoardSize] = isDraw ? brushColor : new Color(0, 0, 0, 0);
         textureList[textureNumber].Apply();
@@ -155,7 +158,7 @@ public class PixelPaint : MonoBehaviour
                && pos.y < boaradBasePos.y + offset;
     }
 
-    private bool IsTransparent(Texture2D _texture)
+    private static bool IsTransparent(Texture2D _texture)
     {
         var pixelData = _texture.GetPixelData<Color32>( 0 );
         for ( var i = 0; i < pixelData.Length; i++ ) {
@@ -163,18 +166,80 @@ public class PixelPaint : MonoBehaviour
         }
         return true;
     }
-    
-    private void SaveTecture()
+
+    private void LoadTexture()
     {
-        for (var i = 0; i < textureList.Count; i++) {
-            if (!IsTransparent(textureList[i])) ConvertTextureToPng(textureList[i], i.ToString());
+        if (voxelName.text == "") throw new Exception("no texture name.");
+        var loadPath = filePath + voxelName.text + "/";
+        if (!Directory.Exists(loadPath))
+            throw new Exception("no directory.");
+        var datastr = File.ReadAllText(loadPath + "/data.json");
+        var vdata = JsonUtility.FromJson<Vdata>(datastr);
+        Clear();
+        for (var i = 0; i < 6; i++) {
+            Texture2D _texture;
+            if (File.Exists(loadPath + i + ".png"))
+            {
+                _texture = LoadPNG(loadPath + i + ".png");
+                _texture.filterMode = FilterMode.Point;
+            }
+            else
+            {
+                _texture = new Texture2D(BoardSize, BoardSize) {
+                    filterMode = FilterMode.Point
+                };
+                AllErace(_texture);
+            }
+            textureList.Add(_texture);
+            var _sprite = Sprite.Create(_texture,
+                new Rect(0, 0, _texture.width, _texture.height),
+                Vector2.zero);
+            spriteList.Add(_sprite);
         }
+
+        for (var i = 0; i < 6; i++)
+        {
+            MirrorsState[i] = byte.Parse(vdata.face[i]);
+            MirrorsImage[i].color = MirrorsState[i] switch
+            {
+                0 => Color.white,
+                1 => Color.blue,
+                2 => Color.red,
+                3 => Color.green,
+                4 => Color.yellow,
+                5 => Color.cyan,
+                _ => MirrorsImage[i].color
+            };
+            images[i].sprite = spriteList[MirrorsState[i]];
+        }
+
+        SwitchTexture(0);
     }
-    
-    void ConvertTextureToPng(Texture2D tex, string fileName)
+
+    private void SaveTexture()
     {
-        var pngData = tex.EncodeToPNG();
-        File.WriteAllBytes(filePath + fileName + ".png", pngData);
+        if (voxelName.text == "") throw new Exception("no texture name.");
+        var savePath = filePath + voxelName.text + "/";
+        var d = new Vdata {
+            name = voxelName.text
+        };
+        if (Directory.Exists(savePath))
+            Directory.Delete(savePath, true);
+        Directory.CreateDirectory(savePath);
+        
+        for (byte i = 0; i < 6; i++)
+        {
+            if (!d.face.Contains(MirrorsState[i].ToString())) {
+                var _texture = textureList[MirrorsState[i]];
+                if (!IsTransparent(_texture)) {
+                    var pngData = _texture.EncodeToPNG();   
+                    File.WriteAllBytes(savePath + MirrorsState[i] + ".png", pngData);   
+                }
+            }
+            d.face.Add(MirrorsState[i].ToString());
+        }
+        var json = JsonUtility.ToJson(d);
+        File.WriteAllText(savePath + "data.json", json);
     }
     
     private static Vector2 GetMousePositionInLocalSpace(GameObject targetObject)
@@ -243,5 +308,26 @@ public class PixelPaint : MonoBehaviour
     private void OnDestroy()
     {
         Clear();
+    }
+    
+    private static Texture2D LoadPNG(string filePath) {
+        if (!File.Exists(filePath)) return null;
+        var fileData = File.ReadAllBytes(filePath);
+        var tex = new Texture2D(2, 2);
+        tex.LoadImage(fileData);
+        return tex;
+    }
+}
+
+[Serializable]
+public class Vdata
+{
+    public string name;
+    public List<string> face;
+
+    public Vdata()
+    {
+        name = "";
+        face = new List<string>();
     }
 }

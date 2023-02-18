@@ -23,10 +23,10 @@ public class SymbolManager
     public static string address { get; set; }
     public static float amount { get; set; }
     
-    public static readonly string xymId = "72C0212E67A08BCE";
-    public const string Node = "https://mikun-testnet.tk:3001";
+    public static readonly string xymId = "6BED913FA20223F8";
+    public const string Node = "https://hideyoshi.mydns.jp:3001";
     public static readonly string WsNode = "wss://mikun-testnet.tk:3001/ws";
-    public static readonly Network network = Network.TestNet;
+    public static readonly Network network = Network.MainNet;
     public static readonly SymbolFacade facade = new (network);
     
     // この関数をボタンにインスペクターから設定する
@@ -56,6 +56,7 @@ public class SymbolManager
         var tx = BuildTransferTransaction(_address, Converter.BytesToHex(keyPair.PublicKey.bytes), _mosaicId, _amount, _message);
         var signature = facade.SignTransaction(keyPair, tx);
         var payload = TransactionsFactory.AttachSignature(tx, signature);
+        Debug.Log(payload);
         const string endpoint = Node + "/transactions";
         var result = await Announce(endpoint, payload);
         Debug.Log(result);   
